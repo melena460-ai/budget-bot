@@ -1,25 +1,4 @@
-"""
-Семейный бюджет — Telegram Bot
-Команды:
-  /start          — приветствие и помощь
-  /help           — все команды
-  /отчёт          — сводка за текущий месяц
-  /история [N]    — последние N операций (по умолч. 10)
-  /категории      — список категорий
-  /удалить [id]   — удалить операцию по ID
-
-Добавление расхода (просто текстом):
-  850 продукты Пятёрочка
-  3500 красота стрижка
-  авто 2000 бензин АЗС
-
-Добавление дохода:
-  +50000 зарплата
-  доход 15000 фриланс
-"""
-
 import os
-import json
 import re
 import sqlite3
 from datetime import datetime
@@ -29,81 +8,41 @@ from telegram.ext import (
     CallbackQueryHandler, ContextTypes, filters
 )
 
-TOKEN = os.environ.get("BOT_TOKEN", "8460531456:AAFchQTVAVqNTuFH9twKzywsc73X-H1Cu9I")
+TOKEN = os.environ.get("BOT_TOKEN", "ВСТАВЬТЕ_ТОКЕН")
 DB_PATH = "budget.db"
 
 CATEGORIES = {
-    "продукты":    "Продукты",
-    "еда":         "Продукты",
-    "магазин":     "Продукты",
-    "супермаркет": "Продукты",
-    "авто":        "Авто",
-    "бензин":      "Авто",
-    "азс":         "Авто",
-    "машина":      "Авто",
-    "здоровье":    "Здоровье",
-    "аптека":      "Здоровье",
-    "врач":        "Здоровье",
-    "больница":    "Здоровье",
-    "клиника":     "Здоровье",
-    "детское":     "Детское",
-    "дети":        "Детское",
-    "ребёнок":     "Детское",
-    "ребенок":     "Детское",
-    "детскиймир":  "Детское",
-    "жкх":         "Коммунальные платежи",
-    "коммунальные":"Коммунальные платежи",
-    "квартплата":  "Коммунальные платежи",
-    "свет":        "Коммунальные платежи",
-    "газ":         "Коммунальные платежи",
-    "ресторан":    "Рестораны и кафе",
-    "кафе":        "Рестораны и кафе",
-    "обед":        "Рестораны и кафе",
-    "ужин":        "Рестораны и кафе",
-    "кофе":        "Рестораны и кафе",
-    "красота":     "Красота",
-    "салон":       "Красота",
-    "стрижка":     "Красота",
-    "маникюр":     "Красота",
-    "косметика":   "Красота",
-    "одежда":      "Одежда",
-    "обувь":       "Одежда",
-    "одежда":      "Одежда",
-    "перевод":     "Переводы",
-    "животные":    "Животные",
-    "питомец":     "Животные",
-    "ветеринар":   "Животные",
-    "зоомагазин":  "Животные",
-    "образование": "Образование/досуг детей",
-    "кружок":      "Образование/досуг детей",
-    "секция":      "Образование/досуг детей",
-    "авито":       "Авито",
-    "ремонт":      "Сервис/ремонт",
-    "сервис":      "Сервис/ремонт",
-    "зарплата":    None,  # доход
-    "доход":       None,
-    "фриланс":     None,
-    "аренда":      None,
-    "кэшбэк":      None,
-    "возврат":     None,
+    "продукты": "Продукты", "еда": "Продукты", "магазин": "Продукты",
+    "супермаркет": "Продукты", "авто": "Авто", "бензин": "Авто",
+    "азс": "Авто", "машина": "Авто", "здоровье": "Здоровье",
+    "аптека": "Здоровье", "врач": "Здоровье", "больница": "Здоровье",
+    "клиника": "Здоровье", "детское": "Детское", "дети": "Детское",
+    "ребёнок": "Детское", "ребенок": "Детское",
+    "жкх": "Коммунальные платежи", "коммунальные": "Коммунальные платежи",
+    "квартплата": "Коммунальные платежи", "свет": "Коммунальные платежи",
+    "ресторан": "Рестораны и кафе", "кафе": "Рестораны и кафе",
+    "обед": "Рестораны и кафе", "ужин": "Рестораны и кафе",
+    "красота": "Красота", "салон": "Красота", "стрижка": "Красота",
+    "маникюр": "Красота", "косметика": "Красота",
+    "одежда": "Одежда", "обувь": "Одежда",
+    "перевод": "Переводы", "животные": "Животные",
+    "питомец": "Животные", "ветеринар": "Животные", "зоомагазин": "Животные",
+    "образование": "Образование/досуг детей", "кружок": "Образование/досуг детей",
+    "секция": "Образование/досуг детей", "авито": "Авито",
+    "ремонт": "Сервис/ремонт", "сервис": "Сервис/ремонт",
+    "зарплата": None, "доход": None, "фриланс": None,
+    "аренда": None, "кэшбэк": None, "возврат": None,
 }
 
 CAT_EMOJI = {
-    "Продукты":                "🛒",
-    "Авто":                    "🚗",
-    "Здоровье":                "💊",
-    "Детское":                 "👶",
-    "Коммунальные платежи":    "🏠",
-    "Рестораны и кафе":        "🍽",
-    "Красота":                 "💄",
-    "Одежда":                  "👗",
-    "Переводы":                "💸",
-    "Животные":                "🐾",
-    "Образование/досуг детей": "📚",
-    "Авито":                   "📦",
-    "Сервис/ремонт":           "🔧",
-    "Прочее":                  "📌",
+    "Продукты": "🛒", "Авто": "🚗", "Здоровье": "💊",
+    "Детское": "👶", "Коммунальные платежи": "🏠",
+    "Рестораны и кафе": "🍽", "Красота": "💄", "Одежда": "👗",
+    "Переводы": "💸", "Животные": "🐾",
+    "Образование/досуг детей": "📚", "Авито": "📦",
+    "Сервис/ремонт": "🔧", "Прочее": "📌",
 }
+
 
 def init_db():
     conn = sqlite3.connect(DB_PATH)
@@ -122,6 +61,7 @@ def init_db():
     conn.commit()
     conn.close()
 
+
 def add_tx(user_id, amount, category, description, tx_type):
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
@@ -133,6 +73,7 @@ def add_tx(user_id, amount, category, description, tx_type):
     conn.commit()
     conn.close()
     return tx_id
+
 
 def get_month_stats(user_id):
     conn = sqlite3.connect(DB_PATH)
@@ -148,6 +89,7 @@ def get_month_stats(user_id):
     conn.close()
     return rows
 
+
 def get_history(user_id, limit=10):
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
@@ -159,6 +101,7 @@ def get_history(user_id, limit=10):
     conn.close()
     return rows
 
+
 def delete_tx(tx_id, user_id):
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
@@ -168,71 +111,56 @@ def delete_tx(tx_id, user_id):
     conn.close()
     return affected > 0
 
+
 def parse_message(text):
-    """
-    Парсит сообщение вида:
-      850 продукты Пятёрочка
-      +50000 зарплата январь
-      авто 2500 бензин
-    Возвращает (amount, category_raw, description) или None
-    """
     text = text.strip()
     is_income = text.startswith("+") or any(
-        w in text.lower() for w in ["доход","зарплата","фриланс","аренда","кэшбэк","возврат"]
+        w in text.lower() for w in ["доход", "зарплата", "фриланс", "аренда", "кэшбэк", "возврат"]
     )
-
-    # Найти число
     nums = re.findall(r"[\+\-]?\d+(?:[.,]\d+)?", text)
     if not nums:
         return None
     amount = float(nums[0].replace(",", ".").replace("+", ""))
-
-    # Убрать число из текста
     rest = re.sub(r"[\+\-]?\d+(?:[.,]\d+)?", "", text, count=1).strip()
     words = rest.split()
-
-    # Первое слово — попытка определить категорию
     cat_raw = words[0].lower() if words else "прочее"
     desc = " ".join(words[1:]) if len(words) > 1 else ""
-
     return amount, cat_raw, desc, is_income
+
 
 def resolve_category(cat_raw, is_income):
     key = cat_raw.lower().replace(" ", "")
     for k, v in CATEGORIES.items():
         if k in key or key in k:
             if v is None:
-                return None, True   # доход
+                return None, True
             return v, False
     if is_income:
         return None, True
     return "Прочее", False
 
+
 def fmt(n):
     return f"{int(n):,}".replace(",", " ") + " ₽"
 
-# ============================================================
-# HANDLERS
-# ============================================================
+
 async def start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "👋 *Семейный бюджет*\n\n"
-        "Просто напиши расход, например:\n"
+        "Просто напиши расход:\n"
         "`850 продукты Пятёрочка`\n"
         "`3500 красота стрижка`\n"
         "`авто 2000 бензин`\n\n"
         "Для дохода:\n"
         "`+50000 зарплата`\n\n"
         "Команды:\n"
-        "/отчёт — сводка за месяц\n"
-        "/история — последние операции\n"
-        "/категории — список категорий\n"
-        "/удалить [id] — удалить запись",
+        "/report — сводка за месяц\n"
+        "/history — последние операции\n"
+        "/categories — список категорий\n"
+        "/delete 42 — удалить запись №42",
         parse_mode="Markdown"
     )
 
-async def help_cmd(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    await start(update, ctx)
 
 async def report(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     uid = update.effective_user.id
@@ -240,47 +168,44 @@ async def report(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     if not rows:
         await update.message.reply_text("За этот месяц пока нет операций.")
         return
-
     income = sum(r[1] for r in rows if r[2] == "income")
     expense = sum(r[1] for r in rows if r[2] == "expense")
     balance = income - expense
-
     month_name = datetime.now().strftime("%B %Y")
     lines = [f"📊 *{month_name}*\n"]
     lines.append(f"💚 Доходы: {fmt(income)}")
     lines.append(f"❤️ Расходы: {fmt(expense)}")
     lines.append(f"{'🟢' if balance >= 0 else '🔴'} Остаток: {fmt(balance)}\n")
     lines.append("*По категориям:*")
-
-    exp_rows = [(r[0], r[1]) for r in rows if r[2] == "expense"]
-    exp_rows.sort(key=lambda x: x[1], reverse=True)
+    exp_rows = sorted([(r[0], r[1]) for r in rows if r[2] == "expense"], key=lambda x: x[1], reverse=True)
     total_exp = expense or 1
     for cat, amt in exp_rows:
         emoji = CAT_EMOJI.get(cat, "📌")
         pct = int(amt / total_exp * 100)
         bar = "█" * (pct // 10) + "░" * (10 - pct // 10)
         lines.append(f"{emoji} {cat}: {fmt(amt)} ({pct}%)\n`{bar}`")
-
     await update.message.reply_text("\n".join(lines), parse_mode="Markdown")
+
 
 async def history(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     uid = update.effective_user.id
     limit = 10
     if ctx.args:
-        try: limit = int(ctx.args[0])
-        except: pass
+        try:
+            limit = int(ctx.args[0])
+        except Exception:
+            pass
     rows = get_history(uid, limit)
     if not rows:
         await update.message.reply_text("Операций пока нет.")
         return
-
     lines = [f"📋 *Последние {len(rows)} операций:*\n"]
     for tx_id, date, amount, cat, desc, tx_type in rows:
         sign = "+" if tx_type == "income" else "-"
         emoji = CAT_EMOJI.get(cat, "📌") if tx_type == "expense" else "💚"
         lines.append(f"`#{tx_id}` {date} {emoji} {sign}{fmt(amount)} — {cat}" + (f"\n_{desc}_" if desc else ""))
-
     await update.message.reply_text("\n".join(lines), parse_mode="Markdown")
+
 
 async def categories(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     lines = ["📂 *Категории расходов:*\n"]
@@ -289,14 +214,15 @@ async def categories(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     lines.append("\n_Пишите название категории в сообщении, бот определит автоматически._")
     await update.message.reply_text("\n".join(lines), parse_mode="Markdown")
 
+
 async def delete(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     uid = update.effective_user.id
     if not ctx.args:
-        await update.message.reply_text("Укажите ID: /удалить 42")
+        await update.message.reply_text("Укажите ID: /delete 42")
         return
     try:
         tx_id = int(ctx.args[0].lstrip("#"))
-    except:
+    except Exception:
         await update.message.reply_text("Неверный ID.")
         return
     if delete_tx(tx_id, uid):
@@ -304,10 +230,10 @@ async def delete(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     else:
         await update.message.reply_text(f"Операция #{tx_id} не найдена.")
 
+
 async def handle_text(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     text = update.message.text.strip()
     uid = update.effective_user.id
-
     parsed = parse_message(text)
     if not parsed:
         await update.message.reply_text(
@@ -315,29 +241,25 @@ async def handle_text(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
             parse_mode="Markdown"
         )
         return
-
     amount, cat_raw, desc, is_income = parsed
     cat, confirmed_income = resolve_category(cat_raw, is_income)
-
     if confirmed_income:
-        # Доход
         tx_id = add_tx(uid, amount, "Доход", desc or cat_raw, "income")
         await update.message.reply_text(
-            f"💚 Записан доход #{tx_id}\n"
+            f"💚 Доход записан #{tx_id}\n"
             f"Сумма: *{fmt(amount)}*\n"
             f"Описание: {desc or cat_raw}",
             parse_mode="Markdown"
         )
     else:
-        # Расход — предложить уточнить категорию если не распознана чётко
         tx_id = add_tx(uid, amount, cat, desc or cat_raw, "expense")
         emoji = CAT_EMOJI.get(cat, "📌")
         keyboard = [[
             InlineKeyboardButton("✅ Верно", callback_data=f"ok_{tx_id}"),
-            InlineKeyboardButton("✏️ Изменить категорию", callback_data=f"edit_{tx_id}_{amount}"),
+            InlineKeyboardButton("✏️ Изменить", callback_data=f"edit_{tx_id}"),
         ]]
         await update.message.reply_text(
-            f"❤️ Записан расход #{tx_id}\n"
+            f"❤️ Расход записан #{tx_id}\n"
             f"Сумма: *{fmt(amount)}*\n"
             f"Категория: {emoji} *{cat}*\n"
             f"Описание: {desc or cat_raw}",
@@ -345,19 +267,16 @@ async def handle_text(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
             reply_markup=InlineKeyboardMarkup(keyboard)
         )
 
+
 async def callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
     data = query.data
-
     if data.startswith("ok_"):
         await query.edit_message_reply_markup(reply_markup=None)
         await query.message.reply_text("👍 Сохранено!")
-
     elif data.startswith("edit_"):
-        parts = data.split("_")
-        tx_id = parts[1]
-        # Show category picker
+        tx_id = data.split("_")[1]
         cats = list(CAT_EMOJI.items())
         keyboard = []
         row = []
@@ -369,7 +288,6 @@ async def callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         if row:
             keyboard.append(row)
         await query.edit_message_reply_markup(reply_markup=InlineKeyboardMarkup(keyboard))
-
     elif data.startswith("setcat_"):
         parts = data.split("_", 2)
         tx_id = parts[1]
@@ -380,23 +298,29 @@ async def callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         conn.close()
         emoji = CAT_EMOJI.get(new_cat, "📌")
         await query.edit_message_text(
-            f"✅ Категория обновлена: {emoji} *{new_cat}*",
+            f"✅ Категория: {emoji} *{new_cat}*",
             parse_mode="Markdown"
         )
+
 
 def main():
     init_db()
     app = Application.builder().token(TOKEN).build()
     app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("help", help_cmd))
+    app.add_handler(CommandHandler("help", start))
     app.add_handler(CommandHandler("report", report))
-app.add_handler(CommandHandler("history", history))
-app.add_handler(CommandHandler("categories", categories))
-app.add_handler(CommandHandler("delete", delete))
-       app.add_handler(CallbackQueryHandler(callback))
+    app.add_handler(CommandHandler("history", history))
+    app.add_handler(CommandHandler("categories", categories))
+    app.add_handler(CommandHandler("delete", delete))
+    app.add_handler(CallbackQueryHandler(callback))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
     print("Бот запущен...")
     app.run_polling()
+
+
+if __name__ == "__main__":
+    main()
+
 
 if __name__ == "__main__":
     main()
